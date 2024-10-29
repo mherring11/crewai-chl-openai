@@ -1,23 +1,21 @@
 import os
-from crewai import Agent, Crew
+from crewai import Agent
 from dotenv import load_dotenv
-from langchain_groq import ChatGroq
+from langchain_openai import ChatOpenAI
 from tools.pdf_reader import PDFReader
 
+# Load environment variables
 load_dotenv()
-groq_api_key = os.getenv("GROQ_API_KEY")
+openai_api_key = os.getenv("OPENAI_API_KEY")
 
 print("Environment variables loaded.")
-print(f"GROQ_API_KEY: {groq_api_key}")
+print(f"OPENAI_API_KEY: {openai_api_key}")
 
 class QuestionAnalysisAgents:
     def __init__(self):
         print("Initializing Analysis Agents...")
-        self.llm = ChatGroq(
-            api_key=groq_api_key,
-            model="llama3-70b-8192"
-        )
-        print("Groq model initialized with provided API key.")
+        self.llm = ChatOpenAI(api_key=openai_api_key, model="gpt-4")  # Using GPT-4
+        print("GPT-4 model initialized.")
 
     def qc_testing_agent(self):
         return Agent(
@@ -31,15 +29,11 @@ class QuestionAnalysisAgents:
     def qc_auditor_agent(self):
         return Agent(
             role="QC Auditor Agent",
-            goal="Evaluate the provided and simulated answers for accuracy and assign a score between 0 and 100.",
-            backstory="Reads the simulated answer and rates it based on relevance, completeness, accuracy, clarity, and conciseness.",
+            goal="Evaluate the accuracy of answers based on the provided content.",
+            backstory="Reads the simulated answer and rates it based on relevance, accuracy, and clarity.",
             llm=self.llm,
             verbose=True
         )
-
-def chunk_text(text, chunk_size=3000):
-    """Splits the text into smaller chunks to respect token limits."""
-    return [text[i:i+chunk_size] for i in range(0, len(text), chunk_size)]
 
 def analyze_questions(pdf_files):
     agents = QuestionAnalysisAgents()
@@ -50,25 +44,29 @@ def analyze_questions(pdf_files):
         if os.path.exists(pdf_path):
             print(f"File exists: {pdf_path}")
             try:
+                # Read the entire text from PDF
                 text = PDFReader.read_pdf(pdf_path)
-                print(f"Extracted text from {pdf_path} (first 500 characters):\n{text[:500]}...")
+                print(f"Extracted text from {pdf_path}:\n{text}...")
 
-                text_chunks = chunk_text(text)
 
-                for idx, chunk in enumerate(text_chunks):
-                    print(f"Processing chunk {idx + 1}/{len(text_chunks)} for {pdf_path}")
+                # Prepare output file for storing questions, answers, and scores
+                output_file = f"{os.path.splitext(pdf_path)[0]}_analysis.txt"
+                with open(output_file, 'w') as f:
+                    print(f"Processing {pdf_path}")
 
-                    input_text = f"{chunk}"
+                    # Use the QC Testing Agent to get a simulated response
+                    qc_result = qc_agent.execute_task(text)
+                    f.write(f"--- QC Testing Agent ({pdf_path}) ---\n")
+                    f.write(f"Questions and Answers:\n{text}\n")
+                    f.write(f"Simulated Response:\n{qc_result}\n")
 
-                    qc_result = qc_agent.execute_task(input_text)
-                    print(f"\n--- QC Testing Agent (Chunk {idx + 1}/{len(text_chunks)} of {pdf_path}) ---")
-                    print(f"Questions and Answers:\n{input_text}\n")
-                    print(f"Simulated Response:\n{qc_result}")
-
-                    audit_input = f"Evaluate the following response and provide a score between 0 and 100 based on relevance, completeness, accuracy, clarity, and conciseness: {qc_result}"
+                    # Use the QC Auditor Agent to evaluate the response
+                    audit_input = f"Evaluate the following response and provide a score between 0 and 100: {qc_result}"
                     audit_result = auditor_agent.execute_task(audit_input)
-                    print(f"\n--- Auditor Agent (Chunk {idx + 1}/{len(text_chunks)} of {pdf_path}) ---")
-                    print(f"Evaluation and Score:\n{audit_result}")
+                    f.write("\n--- Auditor Agent ---\n")
+                    f.write(f"Evaluation and Score:\n{audit_result}\n")
+
+                    print(f"Results written to {output_file}")
 
             except Exception as e:
                 print(f"Error processing {pdf_path}: {e}")
@@ -84,11 +82,5 @@ if __name__ == "__main__":
         "pdfs/Chl_chatbot_test_questions_motion_graphics.pdf",
         "pdfs/Chl_chatbot_test_questions_seo.pdf",
     ]
-
-    for pdf_path in pdf_files:
-        if os.path.exists(pdf_path):
-            print(f"File exists: {pdf_path}")
-        else:
-            print(f"File not found: {pdf_path}")
 
     analyze_questions(pdf_files)

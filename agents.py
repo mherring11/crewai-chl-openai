@@ -1,29 +1,42 @@
 import os
-from crewai import Agent
-from langchain_groq import ChatGroq
+from dotenv import load_dotenv
+from langchain_openai import ChatOpenAI  # Updated to use the ChatOpenAI wrapper for OpenAI integration
+
+# Load the OpenAI API key from environment variables
+load_dotenv()
+openai_api_key = os.getenv("OPENAI_API_KEY")
 
 class QuestionAnalysisAgents:
     def __init__(self):
-        self.llm = ChatGroq(
-            api_key=os.getenv("GROQ_API_KEY"),
-            model="llama3-70b-8192"
+        # Initialize ChatOpenAI with the GPT-4 model and API key
+        self.llm = ChatOpenAI(
+            api_key=openai_api_key,
+            model="gpt-4"  # Set the model to GPT-4
         )
-        print("Groq model initialized.")
+        print("OpenAI GPT-4 model initialized.")
 
-    def qc_testing_agent(self):
-        return Agent(
-            role="QC Testing Agent",
-            goal="Run questions through the LLM and document responses.",
-            backstory="Simulates answers to provided questions using the LLM.",
-            llm=self.llm,
-            verbose=True
-        )
+    def qc_testing_agent(self, input_text):
+        """Simulates an agent to answer questions based on input text."""
+        messages = [
+            {"role": "system", "content": "You are a helpful assistant."},
+            {"role": "user", "content": f"{input_text}\n\nRespond to the above questions:"}
+        ]
+        try:
+            response = self.llm(messages)  # Use the correct call for ChatOpenAI
+            return response['choices'][0]['message']['content'].strip()
+        except Exception as e:
+            print(f"Error generating response: {e}")
+            return "There was an error generating the response."
 
-    def qc_auditor_agent(self):
-        return Agent(
-            role="QC Auditor Agent",
-            goal="Check the provided and simulated answers for accuracy.",
-            backstory="Evaluates the accuracy of answers based on the provided content.",
-            llm=self.llm,
-            verbose=True
-        )
+    def qc_auditor_agent(self, response_text):
+        """Simulates an auditor agent to evaluate a response."""
+        messages = [
+            {"role": "system", "content": "You are an evaluator who scores responses based on relevance, completeness, accuracy, clarity, and conciseness."},
+            {"role": "user", "content": f"Evaluate the following response and provide a score between 0 and 100: {response_text}"}
+        ]
+        try:
+            audit_response = self.llm(messages)  # Use the correct call for ChatOpenAI
+            return audit_response['choices'][0]['message']['content'].strip()
+        except Exception as e:
+            print(f"Error generating audit response: {e}")
+            return "There was an error generating the audit response."
