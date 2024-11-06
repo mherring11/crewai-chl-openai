@@ -1,4 +1,5 @@
 import pdfplumber
+import logging
 
 class PDFReader:
     @staticmethod
@@ -7,8 +8,10 @@ class PDFReader:
             with pdfplumber.open(file_path) as pdf:
                 text = ""
                 for page in pdf.pages:
-                    text += page.extract_text() or ""
+                    text += (page.extract_text() or "").strip() + "\n"
                 return text
+        except FileNotFoundError:
+            logging.error(f"PDF file not found: {file_path}")
         except Exception as e:
-            print(f"Error reading PDF {file_path}: {e}")
-            return ""
+            logging.error(f"Error reading PDF {file_path}: {e}")
+        return ""
